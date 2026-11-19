@@ -1,0 +1,40 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e7edf7;
+  background: #101725;
+  line-height: 1.6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 900px; margin: auto; padding: 3rem 1.25rem; }
+h1 { font-size: clamp(2rem, 6vw, 3.4rem); line-height: 1.15; margin: .5rem 0 1rem; }
+h2 { font-size: 1.3rem; margin-top: 0; }
+h3, h4 { margin: .7rem 0; }
+header { margin-bottom: 2rem; }
+.eyebrow { color: #80dfc6; letter-spacing: .16em; font-weight: 700; font-size: .8rem; }
+section, .notice { border: 1px solid #35445c; border-radius: 12px; padding: 1.5rem; margin: 1.3rem 0; background: #182234; }
+.notice { border-color: #9c7e40; background: #2b271f; }
+.hint, footer { font-size: .87rem; color: #b2c0d5; }
+label, legend { display: block; font-weight: 600; margin: .8rem 0 .4rem; }
+input, textarea, button { font: inherit; }
+input:not([type="checkbox"], [type="radio"]), textarea {
+  width: 100%; padding: .7rem; border: 1px solid #556581; border-radius: 6px; background: #101725;
+}
+textarea { resize: vertical; }
+button { cursor: pointer; border: 1px solid #80dfc6; background: #80dfc6; color: #101725; padding: .65rem 1rem; border-radius: 6px; font-weight: 650; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:hover:enabled { background: #b0f3e1; }
+:focus-visible { outline: 3px solid #8eafff; outline-offset: 3px; }
+.row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.row input { flex: 1; min-width: 200px; }
+.choice { font-weight: 400; }
+fieldset { margin: 1rem 0; border: 1px solid #556581; border-radius: 6px; }
+a { color: #91c7ff; }
+pre { padding: .8rem; background: #101725; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+article { border-top: 1px solid #556581; margin: 1rem 0; padding: .75rem 0; }
+article > div { margin-bottom: 1.5rem; }
+#error { border-left: 4px solid #ff9a9a; padding: 1rem; background: #3a202b; }
+#account-status, #order-status, #error { overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
+footer { text-align: center; margin-top: 2rem; }

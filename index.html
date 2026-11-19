@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>MTC ACME · Browser demo</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">MERKLE TREE CERTIFICATES</p>
+        <h1>ACME, in your browser.</h1>
+        <p>Request a certificate from an experimental MTC ACME server using an ML-DSA-65 account.</p>
+      </header>
+      <aside class="notice">
+        <strong>Experimental demo — use test accounts only.</strong>
+        The account’s private seed is stored in a JavaScript-readable, first-party cookie for one year.
+        Anyone with access to this browser or this origin’s scripts can use it.
+        The cookie is also sent to this page’s host, so serve this app only from an origin you trust.
+        No proxy or backend performs ACME requests.
+      </aside>
+
+      <section aria-labelledby="account-heading">
+        <h2 id="account-heading">1. Your account</h2>
+        <p>ML-DSA keys are generated locally. Returning to this origin restores the same account.</p>
+        <p id="account-status">Loading account…</p>
+        <button id="reset-account" type="button">Forget account</button>
+      </section>
+
+      <section aria-labelledby="directory-heading">
+        <h2 id="directory-heading">2. Connect to a directory</h2>
+        <form id="directory-form">
+          <label for="directory">ACME directory URL</label>
+          <div class="row">
+            <input id="directory" type="url" required value="https://acme.mtc.example/directory">
+            <button type="submit">Connect</button>
+          </div>
+        </form>
+        <p class="hint">The default is a fictional placeholder. Your server must support browser CORS and ML-DSA JOSE.</p>
+        <p id="directory-status">Not connected.</p>
+        <p id="terms" hidden><a id="terms-link" target="_blank" rel="noopener noreferrer">Read server terms of service</a></p>
+      </section>
+
+      <section aria-labelledby="order-heading">
+        <h2 id="order-heading">3. Prepare a certificate request</h2>
+        <form id="order-form">
+          <label for="domains">DNS names</label>
+          <textarea id="domains" rows="2" required placeholder="example.com, www.example.com"></textarea>
+          <p class="hint">Use names you control. For pasted CSRs, these must match the CSR’s subject alternative names exactly.</p>
+          <label for="email">Account email (optional)</label>
+          <input id="email" type="email" placeholder="you@example.com">
+          <fieldset>
+            <legend>Certificate signing request</legend>
+            <label class="choice"><input type="radio" name="csr-mode" value="generate" checked> Generate a P-256 key and CSR locally</label>
+            <label class="choice"><input type="radio" name="csr-mode" value="paste"> Paste an existing PEM CSR</label>
+          </fieldset>
+          <div id="paste-panel" hidden>
+            <label for="csr-input">PKCS#10 CSR</label>
+            <textarea id="csr-input" rows="7" spellcheck="false" placeholder="-----BEGIN CERTIFICATE REQUEST-----"></textarea>
+          </div>
+          <p class="hint">The certificate key is separate from the ML-DSA account key. P-256 is not post-quantum;
+            paste a CSR for another key type if your MTC server requires it.</p>
+          <label class="choice"><input id="agree" type="checkbox"> I agree to the connected server’s terms of service, if any.</label>
+          <button id="start-order" type="submit" disabled>Create / resume account &amp; place order</button>
+        </form>
+        <div id="generated" hidden>
+          <p><strong>Save the certificate private key now.</strong> It is not stored in a cookie and will be lost on reload.
+            It is never sent to the ACME server.</p>
+          <div class="row">
+            <button id="download-key" type="button">Download private key</button>
+            <button id="download-csr" type="button">Download CSR</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="issuance" aria-labelledby="issuance-heading" hidden>
+        <h2 id="issuance-heading">4. Prove control &amp; issue</h2>
+        <p id="order-status"></p>
+        <div id="challenges"></div>
+        <div class="row">
+          <button id="refresh" type="button">Refresh status</button>
+          <button id="finalize" type="button" disabled>Finalize &amp; retrieve certificate</button>
+        </div>
+        <div id="certificate" hidden>
+          <h3>Certificate response</h3>
+          <p id="certificate-type"></p>
+          <p>MTC response formats are experimental. The download preserves the server’s response bytes;
+            it is not necessarily a conventional X.509 PEM chain.</p>
+          <button id="download-certificate" type="button">Download certificate response</button>
+        </div>
+      </section>
+      <p id="activity" role="status" aria-live="polite"></p>
+      <p id="error" role="alert" hidden></p>
+      <footer>RFC 8555 workflow · ML-DSA-65 account signing · No telemetry or external runtime scripts</footer>
+    </main>
+  </body>
+</html>
