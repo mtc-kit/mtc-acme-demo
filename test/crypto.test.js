@@ -80,6 +80,14 @@ test('pasted CSR must be a complete PEM DER sequence', async () => {
   assert.throws(() => parseCsr(pem('CERTIFICATE REQUEST', truncated)));
 });
 
+test('CSR DER length encoding supports large SAN lists without truncation', async () => {
+  const domains = Array.from({ length: 1100 }, (_, i) => `${'a'.repeat(58)}${i}.example.com`);
+  const generated = await generateCsr(domains);
+  assert(generated.der.length > 65535);
+  assert.deepEqual(parseCsr(generated.csr), generated.der);
+  assert.equal(readDer(generated.der).end, generated.der.length);
+});
+
 test('account cookie persists only a seed, restores identity, and fails safely when blocked or corrupt', async (t) => {
   let cookie = '';
   let written = '';

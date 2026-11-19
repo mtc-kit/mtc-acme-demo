@@ -67,8 +67,11 @@ export function parseDomains(text) {
 const concat = (...parts) => new Uint8Array(parts.flatMap((part) => Array.from(part)));
 function der(tag, ...parts) {
   const body = concat(...parts);
-  const length = body.length < 128 ? [body.length]
-    : body.length < 256 ? [0x81, body.length] : [0x82, body.length >> 8, body.length & 255];
+  const lengthBytes = [];
+  for (let size = body.length; size > 0; size = Math.floor(size / 256)) {
+    lengthBytes.unshift(size & 255);
+  }
+  const length = body.length < 128 ? [body.length] : [0x80 | lengthBytes.length, ...lengthBytes];
   return concat([tag, ...length], body);
 }
 const sequence = (...parts) => der(0x30, ...parts);
