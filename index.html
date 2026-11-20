@@ -61,6 +61,15 @@
           <p class="hint">Use names you control. For pasted CSRs, these must match the CSR’s subject alternative names exactly.</p>
           <label for="email">Account email (optional)</label>
           <input id="email" type="email" placeholder="you@example.com">
+          <fieldset id="eab" hidden>
+            <legend>External account binding</legend>
+            <label for="eab-kid">Key ID</label>
+            <input id="eab-kid" autocomplete="off" spellcheck="false">
+            <label for="eab-hmac">HMAC key (base64url)</label>
+            <input id="eab-hmac" type="password" autocomplete="off" spellcheck="false">
+            <p class="hint">This directory requires external account binding. Enter the key ID and HMAC key issued by
+              your CA. The HMAC key signs the account registration (HS256) locally; it is never sent to the server or stored.</p>
+          </fieldset>
           <fieldset>
             <legend>Certificate signing request</legend>
             <label class="choice"><input type="radio" name="csr-mode" value="generate" checked> Generate an ML-DSA-44 key and CSR locally</label>

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { AcmeClient, endpoint } from '../src/acme.js';
 import { accountFromSeed, decode64, utf8 } from '../src/crypto.js';
@@ -89,4 +90,27 @@ test('badNonce retries are bounded and terminal authorization failures stop poll
   client.kid = `${origin}/acct/1`;
   client.fetch = async () => json({ status: 'invalid', error: { detail: 'DNS failed' } });
   await assert.rejects(client.poll(`${origin}/auth`, () => false), /DNS failed/);
+});
+
+test('external account binding is an HS256 JWS over the account JWK, keyed by the CA MAC key', async () => {
+  const account = accountFromSeed(new Uint8Array(32), 'ML-DSA-44');
+  const hmacKey = Buffer.from('0123456789abcdef0123456789abcdef').toString('base64url');
+  let registration;
+  const client = new AcmeClient(account, async (url, options) => {
+    if (url === `${origin}/directory`) return json({ ...directory, meta: { externalAccountRequired: true } });
+    if (options.method === 'HEAD') return new Response(null, { headers: { 'Replay-Nonce': 'nonce' } });
+    registration = unpack(JSON.parse(options.body).payload);
+    return json({ status: 'valid' }, 201, { 'Replay-Nonce': 'next', Location: `${origin}/accounts/1` });
+  });
+  await client.connect(`${origin}/directory`);
+  await client.register('', true, { kid: 'kid-1', hmacKey });
+  const eab = registration.externalAccountBinding;
+  assert.deepEqual(unpack(eab.protected), { alg: 'HS256', kid: 'kid-1', url: directory.newAccount });
+  assert.deepEqual(unpack(eab.payload), account.jwk);
+  assert.equal(eab.signature, createHmac('sha256', Buffer.from(hmacKey, 'base64url'))
+    .update(`${eab.protected}.${eab.payload}`).digest('base64url'));
+  await assert.rejects(client.externalAccountBinding({ kid: '', hmacKey }), /key ID/);
+  for (const invalid of ['', 'not+base64url', 'a']) {
+    await assert.rejects(client.externalAccountBinding({ kid: 'kid-1', hmacKey: invalid }), /base64url-encoded/, invalid);
+  }
 });

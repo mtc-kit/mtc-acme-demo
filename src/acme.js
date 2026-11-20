@@ -1,4 +1,4 @@
-import { base64url, utf8 } from './crypto.js';
+import { base64url, decode64, utf8 } from './crypto.js';
 
 export function endpoint(value) {
   const url = new URL(value);
@@ -74,15 +74,31 @@ export class AcmeClient {
     }
   }
 
-  async register(email, agree) {
+  async register(email, agree, eab) {
     const payload = { termsOfServiceAgreed: agree };
     if (email) payload.contact = [`mailto:${email}`];
+    if (eab) payload.externalAccountBinding = await this.externalAccountBinding(eab);
     const { data, response } = await this.post(this.directory.newAccount, payload, true);
     const location = response.headers.get('Location');
     if (!location) throw new Error('Missing account Location. Check the server’s CORS exposed headers.');
     this.kid = endpoint(location);
     if (data.status !== 'valid') throw new Error(`Account is ${data.status}.`);
     return data;
+  }
+
+  // RFC 8555 §7.3.4: an HS256 JWS over the account JWK, keyed by the CA-issued MAC key.
+  async externalAccountBinding({ kid, hmacKey }) {
+    if (!kid) throw new Error('Enter the external account binding key ID.');
+    let keyBytes;
+    try { keyBytes = decode64(hmacKey.replace(/=+$/, '')); } catch { keyBytes = undefined; }
+    if (!/^[A-Za-z0-9_-]+={0,2}$/.test(hmacKey) || !keyBytes?.length) {
+      throw new Error('The external account binding HMAC key must be base64url-encoded.');
+    }
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const protected64 = base64url(utf8(JSON.stringify({ alg: 'HS256', kid, url: this.directory.newAccount })));
+    const payload64 = base64url(utf8(JSON.stringify(this.account.jwk)));
+    const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, utf8(`${protected64}.${payload64}`)));
+    return { protected: protected64, payload: payload64, signature: base64url(signature) };
   }
 
   async newOrder(domains) {
