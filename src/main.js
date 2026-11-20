@@ -113,6 +113,12 @@ async function refresh() {
   if (order.error) throw new Error(order.error.detail || JSON.stringify(order.error));
 }
 
+function showEab(required) {
+  $('eab').hidden = !required;
+  $('eab-kid').required = required;
+  $('eab-hmac').required = required;
+}
+
 $('directory-form').addEventListener('submit', (event) => {
   event.preventDefault();
   run('Loading directory…', async () => {
@@ -122,12 +128,11 @@ $('directory-form').addEventListener('submit', (event) => {
     $('terms').hidden = true;
     $('agree').checked = false;
     $('directory-status').textContent = 'Not connected.';
+    showEab(false);
     const next = new AcmeClient(account);
     const url = endpoint($('directory').value.trim());
     const directory = await next.connect(url);
-    if (directory.meta?.externalAccountRequired) {
-      throw new Error('This directory requires external account binding, which this demo does not support.');
-    }
+    showEab(directory.meta?.externalAccountRequired === true);
     if (directory.meta?.termsOfService) {
       $('terms-link').href = endpoint(directory.meta.termsOfService);
       $('terms').hidden = false;
@@ -151,6 +156,7 @@ $('order-form').addEventListener('submit', (event) => {
     if (!$('agree').checked) throw new Error('Read and accept the connected server’s terms before creating an account.');
     if (order && !confirm('Replace the current order in this page? Save any generated certificate private key first.')) return;
     const domains = parseDomains($('domains').value);
+    const eab = $('eab').hidden ? undefined : { kid: $('eab-kid').value.trim(), hmacKey: $('eab-hmac').value.trim() };
     if (document.querySelector('[name="csr-mode"]:checked').value === 'paste') {
       csr = parseCsr($('csr-input').value);
       generated = undefined;
@@ -162,7 +168,7 @@ $('order-form').addEventListener('submit', (event) => {
     order = undefined;
     $('issuance').hidden = true;
     $('certificate').hidden = true;
-    await client.register($('email').value.trim(), $('agree').checked);
+    await client.register($('email').value.trim(), $('agree').checked, eab);
     order = await client.newOrder(domains);
     await refresh();
   });

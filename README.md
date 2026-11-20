@@ -43,7 +43,9 @@ domain for the Pages site.
    by earlier versions, which hold only a seed, are restored as ML-DSA-65.
 2. Replace `https://acme.mtc.example/directory` with your server's directory URL
    and select **Connect**. The default is deliberately fictional.
-3. Enter DNS names, optionally an account email, and choose a CSR mode:
+3. Enter DNS names, optionally an account email, and choose a CSR mode. If the
+   directory requires external account binding (EAB), also enter the EAB key
+   ID and HMAC key issued by your CA:
    - **Generate:** creates a separate ML-DSA-44 certificate key and PKCS#10
      CSR with DNS subject alternative names, locally in the browser. The key
      is downloaded as a seed-only PKCS#8 file
@@ -95,9 +97,15 @@ If you forget the account cookie, the app cannot recover the old account.
   delayed landmark-relative `acme-optional-alternate` links, select ACME
   profiles, or verify MTC proofs. An MTC-aware consumer is needed to validate
   the resulting certificate.
-- Manual `dns-01` and `http-01` are supported. External account binding,
-  `tls-alpn-01`, revocation, and automated renewal are not implemented.
+- Manual `dns-01` and `http-01` are supported. `tls-alpn-01`, revocation, and
+  automated renewal are not implemented.
   Draft-based MTC servers may have additional interoperability requirements.
+- External account binding
+  ([RFC 8555 §7.3.4](https://www.rfc-editor.org/rfc/rfc8555.html#section-7.3.4))
+  is supported with HS256 and a base64url-encoded HMAC key. The EAB fields
+  are shown, and the binding is sent, only when the directory sets
+  `meta.externalAccountRequired` to `true`. The HMAC key is used only in the
+  page to sign the binding; it is not sent to the CA or stored.
 
 ### Browser CORS requirements
 
