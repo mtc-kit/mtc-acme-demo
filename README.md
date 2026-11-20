@@ -33,11 +33,14 @@ domain for the Pages site.
 
 ## Request a certificate
 
-1. The webpage creates an **ML-DSA-65** account key using
-   `@noble/post-quantum`. Its 32-byte private seed is stored in the
-   `mtc_acme_account_v1` first-party cookie for one year. Reloading on the same
-   origin restores the key; connecting and registering again resumes the same
-   server account.
+1. On first visit, choose an **ML-DSA-44**, **ML-DSA-65** (default), or
+   **ML-DSA-87** account key and select **Create account key**. The key is
+   generated using `@noble/post-quantum`. The algorithm and 32-byte private
+   seed are stored in the `mtc_acme_account_v1` first-party cookie for one
+   year. Reloading on the same origin restores the key; connecting and
+   registering again resumes the same server account. To use a different
+   algorithm, select **Forget account** and create a new key. Cookies written
+   by earlier versions, which hold only a seed, are restored as ML-DSA-65.
 2. Replace `https://acme.mtc.example/directory` with your server's directory URL
    and select **Connect**. The default is deliberately fictional.
 3. Enter DNS names, optionally an account email, and choose a CSR mode:
@@ -70,10 +73,12 @@ If you forget the account cookie, the app cannot recover the old account.
 
 ## MTC interoperability
 
-- The ACME server must accept ML-DSA-65 JOSE accounts. The client uses
+- The ACME server must accept JOSE accounts using the chosen ML-DSA
+  algorithm. The client uses
   [RFC 9964](https://www.rfc-editor.org/rfc/rfc9964.html) public JWKs
-  (`kty: "AKP"`, `alg: "ML-DSA-65"`, `pub`) and ordinary ML-DSA with an empty
-  context. No account private key material is sent to the ACME server.
+  (`kty: "AKP"`, `alg: "ML-DSA-44"`, `"ML-DSA-65"`, or `"ML-DSA-87"`, `pub`),
+  the same `alg` in the JWS protected header, and ordinary ML-DSA with an
+  empty context. No account private key material is sent to the ACME server.
 - MTC support does not imply support for ML-DSA account keys. A conventional
   ACME server may reject this algorithm; the client deliberately does not
   fall back to a classical account key.

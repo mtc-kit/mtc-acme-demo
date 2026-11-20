@@ -1,21 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ml_dsa44, ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
-import { accountFromSeed, base64url, decode64, generateCsr, parseCsr, parseDomains, sha256, utf8, pem, loadAccount, clearAccount, ACCOUNT_COOKIE } from '../src/crypto.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
+import { accountFromSeed, base64url, decode64, generateCsr, parseCsr, parseDomains, sha256, utf8, pem, loadAccount, createAccount, clearAccount, ACCOUNT_COOKIE } from '../src/crypto.js';
 
-test('ML-DSA accounts restore from a compact seed and sign valid JOSE messages', async () => {
-  const seed = crypto.getRandomValues(new Uint8Array(32));
-  const first = accountFromSeed(seed);
-  const restored = accountFromSeed(decode64(base64url(seed)));
-  assert.deepEqual(restored.jwk, first.jwk);
-  assert.deepEqual(Object.keys(first.jwk).sort(), ['alg', 'kty', 'pub']);
-  assert.equal(first.jwk.alg, 'ML-DSA-65');
-  const message = utf8('protected.payload');
-  assert(ml_dsa65.verify(first.sign(message), message, decode64(first.jwk.pub)));
-  assert.equal(await first.thumbprint(), base64url(await sha256(utf8(JSON.stringify({
-    alg: first.jwk.alg, kty: first.jwk.kty, pub: first.jwk.pub,
-  })))));
-  assert.throws(() => accountFromSeed(new Uint8Array(31)));
+test('ML-DSA-44/65/87 accounts restore from a compact seed and sign valid JOSE messages', async () => {
+  for (const [alg, scheme] of [['ML-DSA-44', ml_dsa44], ['ML-DSA-65', ml_dsa65], ['ML-DSA-87', ml_dsa87]]) {
+    const seed = crypto.getRandomValues(new Uint8Array(32));
+    const first = accountFromSeed(seed, alg);
+    const restored = accountFromSeed(decode64(base64url(seed)), alg);
+    assert.deepEqual(restored.jwk, first.jwk);
+    assert.deepEqual(Object.keys(first.jwk).sort(), ['alg', 'kty', 'pub']);
+    assert.equal(first.jwk.alg, alg);
+    assert.deepEqual(decode64(first.jwk.pub), scheme.keygen(seed).publicKey);
+    const message = utf8('protected.payload');
+    assert(scheme.verify(first.sign(message), message, decode64(first.jwk.pub)));
+    assert.equal(await first.thumbprint(), base64url(await sha256(utf8(JSON.stringify({
+      alg: first.jwk.alg, kty: first.jwk.kty, pub: first.jwk.pub,
+    })))));
+  }
+  assert.throws(() => accountFromSeed(new Uint8Array(31), 'ML-DSA-65'));
+  assert.throws(() => accountFromSeed(new Uint8Array(32), 'ES256'), /Unsupported account key algorithm/);
 });
 
 test('DNS names are normalized and invalid identifiers rejected', () => {
@@ -162,15 +166,24 @@ test('account cookie persists only a seed, restores identity, and fails safely w
     },
   };
   globalThis.location = { protocol: 'https:' };
-  const first = loadAccount();
+  assert.equal(loadAccount(), undefined);
+  const first = createAccount('ML-DSA-87');
+  assert.equal(first.jwk.alg, 'ML-DSA-87');
   assert.match(written, /Max-Age=31536000; SameSite=Strict; Secure$/);
-  assert.match(cookie, new RegExp(`^${ACCOUNT_COOKIE}=[A-Za-z0-9_-]{43}$`));
-  assert.equal(await loadAccount().thumbprint(), await first.thumbprint());
+  assert.match(cookie, new RegExp(`^${ACCOUNT_COOKIE}=ML-DSA-87\\.[A-Za-z0-9_-]{43}$`));
+  const restored = loadAccount();
+  assert.deepEqual(restored.jwk, first.jwk);
+  assert.equal(await restored.thumbprint(), await first.thumbprint());
+  const seed = cookie.split('.').at(-1);
+  cookie = `${ACCOUNT_COOKIE}=${seed}`;
+  assert.deepEqual(loadAccount().jwk, accountFromSeed(decode64(seed), 'ML-DSA-65').jwk, 'legacy seed-only cookie');
   clearAccount();
   assert.equal(cookie, '');
   blocked = true;
-  assert.throws(() => loadAccount(), /Cookies are blocked/);
+  assert.throws(() => createAccount('ML-DSA-44'), /Cookies are blocked/);
   blocked = false;
-  cookie = `${ACCOUNT_COOKIE}=corrupt`;
-  assert.throws(() => loadAccount(), /Invalid account cookie/);
+  for (const value of ['corrupt', `ML-DSA-99.${seed}`, `ES256.${seed}`]) {
+    cookie = `${ACCOUNT_COOKIE}=${value}`;
+    assert.throws(() => loadAccount(), /Invalid account cookie/, value);
+  }
 });

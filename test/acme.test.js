@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { AcmeClient, endpoint } from '../src/acme.js';
 import { accountFromSeed, decode64, utf8 } from '../src/crypto.js';
 
@@ -10,7 +10,7 @@ const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(d
 const unpack = (text) => JSON.parse(new TextDecoder().decode(decode64(text)));
 
 test('ACME JWS flow uses nonces, public JWK then kid, empty POST-as-GET and raw certificate bytes', async () => {
-  const account = accountFromSeed(new Uint8Array(32));
+  const account = accountFromSeed(new Uint8Array(32), 'ML-DSA-44');
   const seen = [];
   let nonce = 0;
   let badNonce = true;
@@ -21,10 +21,10 @@ test('ACME JWS flow uses nonces, public JWK then kid, empty POST-as-GET and raw 
     if (options.method === 'HEAD') return new Response(null, { headers: { 'Replay-Nonce': `nonce-${++nonce}` } });
     const body = JSON.parse(options.body);
     const header = unpack(body.protected);
-    assert.equal(header.alg, 'ML-DSA-65');
+    assert.equal(header.alg, 'ML-DSA-44');
     assert.equal(header.url, url);
     assert.equal(header.nonce, `nonce-${nonce}`);
-    assert(ml_dsa65.verify(decode64(body.signature), utf8(`${body.protected}.${body.payload}`), decode64(account.jwk.pub)));
+    assert(ml_dsa44.verify(decode64(body.signature), utf8(`${body.protected}.${body.payload}`), decode64(account.jwk.pub)));
     seen.push({ header, payload: body.payload ? unpack(body.payload) : null, url });
     const headers = { 'Replay-Nonce': `nonce-${++nonce}` };
     if (url === directory.newAccount) {
@@ -71,14 +71,14 @@ test('reject unsafe endpoint schemes, credentials, and fragments', () => {
 });
 
 test('missing exposed nonce fails with actionable error', async () => {
-  const client = new AcmeClient(accountFromSeed(new Uint8Array(32)), async () => new Response(null));
+  const client = new AcmeClient(accountFromSeed(new Uint8Array(32), 'ML-DSA-65'), async () => new Response(null));
   client.directory = directory;
   await assert.rejects(client.register('', true), /Replay-Nonce.*CORS/);
 });
 
 test('badNonce retries are bounded and terminal authorization failures stop polling', async () => {
   let requests = 0;
-  const client = new AcmeClient(accountFromSeed(new Uint8Array(32)), async () => {
+  const client = new AcmeClient(accountFromSeed(new Uint8Array(32), 'ML-DSA-65'), async () => {
     requests++;
     return json({ type: 'urn:ietf:params:acme:error:badNonce', detail: 'Rejected' }, 400, { 'Replay-Nonce': 'next' });
   });

@@ -17,13 +17,20 @@ export async function sha256(bytes) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
 }
 
-export function accountFromSeed(seed) {
+// RFC 9964 JOSE algorithm names for the permitted ACME account key types.
+export const ACCOUNT_ALGORITHMS = { 'ML-DSA-44': ml_dsa44, 'ML-DSA-65': ml_dsa65, 'ML-DSA-87': ml_dsa87 };
+// Cookies written before algorithm choice was added contain only an ML-DSA-65 seed.
+const LEGACY_ACCOUNT_ALGORITHM = 'ML-DSA-65';
+
+export function accountFromSeed(seed, alg) {
+  if (!Object.hasOwn(ACCOUNT_ALGORITHMS, alg)) throw new Error(`Unsupported account key algorithm: ${alg}.`);
   if (seed.length !== 32) throw new Error('The account seed must contain 32 bytes.');
-  const { publicKey, secretKey } = ml_dsa65.keygen(seed);
-  const jwk = { kty: 'AKP', alg: 'ML-DSA-65', pub: base64url(publicKey) };
+  const scheme = ACCOUNT_ALGORITHMS[alg];
+  const { publicKey, secretKey } = scheme.keygen(seed);
+  const jwk = { kty: 'AKP', alg, pub: base64url(publicKey) };
   return {
     jwk,
-    sign: (message) => ml_dsa65.sign(message, secretKey),
+    sign: (message) => scheme.sign(message, secretKey),
     // RFC 7638 canonical member ordering; alg is required for AKP thumbprints.
     thumbprint: async () => base64url(await sha256(utf8(JSON.stringify({
       alg: jwk.alg, kty: jwk.kty, pub: jwk.pub,
@@ -31,26 +38,30 @@ export function accountFromSeed(seed) {
   };
 }
 
+const accountCookie = (value, maxAge) => `${ACCOUNT_COOKIE}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
+
 export function loadAccount() {
   const value = document.cookie.split('; ').find((part) => part.startsWith(`${ACCOUNT_COOKIE}=`))
     ?.slice(ACCOUNT_COOKIE.length + 1);
-  if (value) {
-    if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
-      throw new Error('Invalid account cookie. Clear it explicitly to create a different account.');
-    }
-    return accountFromSeed(decode64(value));
-  }
+  if (!value) return undefined;
+  const match = value.match(/^(?:(ML-DSA-(?:44|65|87))\.)?([A-Za-z0-9_-]{43})$/);
+  if (!match) throw new Error('Invalid account cookie. Clear it explicitly to create a different account.');
+  return accountFromSeed(decode64(match[2]), match[1] ?? LEGACY_ACCOUNT_ALGORITHM);
+}
+
+export function createAccount(alg) {
   const seed = crypto.getRandomValues(new Uint8Array(32));
-  const encoded = base64url(seed);
-  document.cookie = `${ACCOUNT_COOKIE}=${encoded}; Path=/; Max-Age=31536000; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
-  if (!document.cookie.split('; ').includes(`${ACCOUNT_COOKIE}=${encoded}`)) {
+  const account = accountFromSeed(seed, alg);
+  const value = `${alg}.${base64url(seed)}`;
+  document.cookie = accountCookie(value, 31536000);
+  if (!document.cookie.split('; ').includes(`${ACCOUNT_COOKIE}=${value}`)) {
     throw new Error('Cookies are blocked. Allow first-party cookies to retain the ACME account.');
   }
-  return accountFromSeed(seed);
+  return account;
 }
 
 export function clearAccount() {
-  document.cookie = `${ACCOUNT_COOKIE}=; Path=/; Max-Age=0; SameSite=Strict${location.protocol === 'https:' ? '; Secure' : ''}`;
+  document.cookie = accountCookie('', 0);
 }
 
 export function parseDomains(text) {
