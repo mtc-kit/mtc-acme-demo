@@ -1,4 +1,4 @@
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 
 const encoder = new TextEncoder();
 export const utf8 = (text) => encoder.encode(text);
@@ -82,23 +82,80 @@ export function pem(label, bytes) {
   return `-----BEGIN ${label}-----\n${encoded.match(/.{1,64}/g).join('\n')}\n-----END ${label}-----\n`;
 }
 
+// Chrome Quantum-resistant Root Program policy §2.4.3.2 permits these subscriber key
+// AlgorithmIdentifiers (RFC 9881 pure ML-DSA, parameters absent), byte-for-byte.
+const ML_DSA = [
+  { name: 'ML-DSA-44', scheme: ml_dsa44, publicKeyLength: 1312 },
+  { name: 'ML-DSA-65', scheme: ml_dsa65, publicKeyLength: 1952 },
+  { name: 'ML-DSA-87', scheme: ml_dsa87, publicKeyLength: 2592 },
+].map((algorithm, i) => ({
+  ...algorithm,
+  identifier: [0x30, 0x0b, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, 0x11 + i],
+}));
+const GENERATED_ALGORITHM = ML_DSA[0];
+const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+function readDer(bytes, offset, end, tag, message = 'The CSR is not a well-formed PKCS#10 request.') {
+  if (offset + 2 > end || bytes[offset] !== tag) throw new Error(message);
+  let body = offset + 2;
+  let length = bytes[offset + 1];
+  if (length & 0x80) {
+    const count = length & 0x7f;
+    if (!count || count > 4 || body + count > end) throw new Error(message);
+    length = bytes.slice(body, body + count).reduce((n, byte) => n * 256 + byte, 0);
+    body += count;
+  }
+  if (body + length > end) throw new Error(message);
+  return { start: offset, body, end: body + length };
+}
+
+function mlDsaAlgorithm(bytes, identifier) {
+  const encoded = bytes.slice(identifier.start, identifier.end);
+  const algorithm = ML_DSA.find((candidate) => sameBytes(encoded, candidate.identifier));
+  if (!algorithm) {
+    throw new Error('The CSR must use an ML-DSA-44, ML-DSA-65, or ML-DSA-87 key and signature with a DER-encoded AlgorithmIdentifier without parameters; RSA, ECDSA, HashML-DSA, and other algorithms are not permitted.');
+  }
+  return algorithm;
+}
+
 export function parseCsr(text) {
   const match = text.trim().match(/^-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----\s+([A-Za-z0-9+/=\s]+)\s+-----END (?:NEW )?CERTIFICATE REQUEST-----$/);
   if (!match) throw new Error('Paste a PEM-encoded PKCS#10 certificate request.');
   const bytes = decode64(match[1].replace(/\s/g, ''));
-  const count = bytes[1] < 128 ? 0 : bytes[1] & 0x7f;
-  const header = bytes[1] < 128 ? 2 : 2 + count;
-  const length = bytes[1] < 128 ? bytes[1]
-    : bytes.slice(2, header).reduce((n, byte) => n * 256 + byte, 0);
-  if (bytes[0] !== 0x30 || bytes[1] === 0x80 || count > 4 || header + length !== bytes.length) {
-    throw new Error('The CSR is not a complete DER sequence.');
+  const root = readDer(bytes, 0, bytes.length, 0x30, 'The CSR is not a complete DER sequence.');
+  if (root.end !== bytes.length) throw new Error('The CSR is not a complete DER sequence.');
+  const info = readDer(bytes, root.body, root.end, 0x30);
+  const signatureAlgorithm = readDer(bytes, info.end, root.end, 0x30);
+  const signature = readDer(bytes, signatureAlgorithm.end, root.end, 0x03);
+  const version = readDer(bytes, info.body, info.end, 0x02);
+  const subject = readDer(bytes, version.end, info.end, 0x30);
+  const spki = readDer(bytes, subject.end, info.end, 0x30);
+  const keyAlgorithm = readDer(bytes, spki.body, spki.end, 0x30);
+  const publicKey = readDer(bytes, keyAlgorithm.end, spki.end, 0x03);
+  if (signature.end !== root.end || publicKey.end !== spki.end
+    || bytes[signature.body] !== 0 || bytes[publicKey.body] !== 0) {
+    throw new Error('The CSR is not a well-formed PKCS#10 request.');
+  }
+  const algorithm = mlDsaAlgorithm(bytes, keyAlgorithm);
+  if (mlDsaAlgorithm(bytes, signatureAlgorithm) !== algorithm) {
+    throw new Error(`The CSR signature algorithm must match its ${algorithm.name} key.`);
+  }
+  const key = bytes.slice(publicKey.body + 1, publicKey.end);
+  if (key.length !== algorithm.publicKeyLength) {
+    throw new Error(`The CSR contains an invalid ${algorithm.name} public key.`);
+  }
+  if (!algorithm.scheme.verify(bytes.slice(signature.body + 1, signature.end), bytes.slice(info.start, info.end), key)) {
+    throw new Error('The CSR signature is invalid.');
   }
   return bytes;
 }
 
 export async function generateCsr(domains) {
-  const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
+  const algorithm = GENERATED_ALGORITHM;
+  const seed = crypto.getRandomValues(new Uint8Array(32));
+  const { publicKey, secretKey } = algorithm.scheme.keygen(seed);
+  const algorithmIdentifier = new Uint8Array(algorithm.identifier);
+  const spki = sequence(algorithmIdentifier, der(0x03, [0], publicKey));
   const san = sequence(...domains.map((name) => der(0x82, utf8(name))));
   const extension = sequence(oid([0x55, 0x1d, 0x11]), der(0x01, [0xff]), der(0x04, san));
   const attributes = der(0xa0, sequence(
@@ -106,18 +163,9 @@ export async function generateCsr(domains) {
     der(0x31, sequence(extension)),
   ));
   const info = sequence(der(0x02, [0]), sequence(), spki, attributes);
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, info,
-  ));
-  const integer = (part) => {
-    let start = 0;
-    while (start < part.length - 1 && part[start] === 0) start++;
-    const value = part.slice(start);
-    return der(0x02, ...(value[0] & 0x80 ? [[0], value] : [value]));
-  };
-  const signatureDer = sequence(integer(signature.slice(0, 32)), integer(signature.slice(32)));
-  const csr = sequence(info, sequence(oid([0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])),
-    der(0x03, [0], signatureDer));
-  const privateKey = new Uint8Array(await crypto.subtle.exportKey('pkcs8', keys.privateKey));
+  const signature = algorithm.scheme.sign(info, secretKey);
+  const csr = sequence(info, algorithmIdentifier, der(0x03, [0], signature));
+  // RFC 9881 seed-only ML-DSA-PrivateKey: [0] IMPLICIT OCTET STRING (SIZE (32)).
+  const privateKey = sequence(der(0x02, [0]), algorithmIdentifier, der(0x04, der(0x80, seed)));
   return { der: csr, csr: pem('CERTIFICATE REQUEST', csr), privateKey: pem('PRIVATE KEY', privateKey) };
 }
