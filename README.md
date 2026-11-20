@@ -13,9 +13,23 @@ npm run dev
 ```
 
 Open the displayed localhost URL. For deployment, run `npm run build` and serve
-`dist/` from a **dedicated, trusted HTTPS origin**. Do not open `index.html` using
+`dist/` from a **dedicated, trusted HTTPS origin**. The build uses relative asset
+paths, so it can be served from any directory. Do not open `index.html` using
 `file://`. `npm run preview` previews a production build; `npm test` runs the
 built-in Node crypto and protocol tests.
+
+### GitHub Pages
+
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) tests and builds
+every push and pull request, and deploys `main` to
+<https://mtc-kit.github.io/mtc-acme-demo/>. The repository's Pages source must
+be set to **GitHub Actions**. ACME servers must allow CORS requests from
+`https://mtc-kit.github.io`.
+
+The `mtc-kit.github.io` origin is shared by every Pages site in the `mtc-kit`
+organization, so scripts on any of them can read this app's account cookie.
+For anything beyond disposable test accounts, configure a dedicated custom
+domain for the Pages site.
 
 ## Request a certificate
 
