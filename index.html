@@ -53,15 +53,15 @@
           <input id="email" type="email" placeholder="you@example.com">
           <fieldset>
             <legend>Certificate signing request</legend>
-            <label class="choice"><input type="radio" name="csr-mode" value="generate" checked> Generate a P-256 key and CSR locally</label>
+            <label class="choice"><input type="radio" name="csr-mode" value="generate" checked> Generate an ML-DSA-44 key and CSR locally</label>
             <label class="choice"><input type="radio" name="csr-mode" value="paste"> Paste an existing PEM CSR</label>
           </fieldset>
           <div id="paste-panel" hidden>
             <label for="csr-input">PKCS#10 CSR</label>
             <textarea id="csr-input" rows="7" spellcheck="false" placeholder="-----BEGIN CERTIFICATE REQUEST-----"></textarea>
           </div>
-          <p class="hint">The certificate key is separate from the ML-DSA account key. P-256 is not post-quantum;
-            paste a CSR for another key type if your MTC server requires it.</p>
+          <p class="hint">The certificate key is separate from the ML-DSA account key. Pasted CSRs must use an
+            ML-DSA-44, ML-DSA-65, or ML-DSA-87 key; RSA, ECDSA, HashML-DSA, and other algorithms are rejected.</p>
           <label class="choice"><input id="agree" type="checkbox"> I agree to the connected server’s terms of service, if any.</label>
           <button id="start-order" type="submit" disabled>Create / resume account &amp; place order</button>
         </form>

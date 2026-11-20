@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPublicKey, verify } from 'node:crypto';
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44, ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
 import { accountFromSeed, base64url, decode64, generateCsr, parseCsr, parseDomains, sha256, utf8, pem, loadAccount, clearAccount, ACCOUNT_COOKIE } from '../src/crypto.js';
 
 test('ML-DSA accounts restore from a compact seed and sign valid JOSE messages', async () => {
@@ -49,9 +48,18 @@ test('generated PKCS#10 CSR has a verifiable signature, SANs, and matching priva
   const version = readDer(info.body);
   const subject = readDer(info.body, version.end);
   const spki = readDer(info.body, subject.end);
-  const publicKey = createPublicKey({ key: Buffer.from(spki.full), format: 'der', type: 'spki' });
-  assert(verify('sha256', info.full, publicKey, signature.body.slice(1)));
-  assert.deepEqual(publicKey.export({ format: 'jwk' }), createPublicKey(generated.privateKey).export({ format: 'jwk' }));
+  const keyAlgorithm = readDer(spki.body);
+  assert.equal(Buffer.from(keyAlgorithm.body).toString('hex'), '0609608648016503040311');
+  assert.deepEqual(algorithm.body, keyAlgorithm.body);
+  const publicKey = readDer(spki.body, keyAlgorithm.end).body.slice(1);
+  assert(ml_dsa44.verify(signature.body.slice(1), info.full, publicKey));
+  const pkcs8 = readDer(decode64(generated.privateKey.replace(/-----[^-]+-----|\s/g, '')));
+  const pkcs8Version = readDer(pkcs8.body);
+  const privateKeyAlgorithm = readDer(pkcs8.body, pkcs8Version.end);
+  assert.deepEqual(privateKeyAlgorithm.body, keyAlgorithm.body);
+  const seed = readDer(readDer(pkcs8.body, privateKeyAlgorithm.end).body);
+  assert.equal(seed.tag, 0x80);
+  assert.deepEqual(ml_dsa44.keygen(seed.body).publicKey, publicKey);
   const attributes = readDer(info.body, spki.end);
   const request = readDer(attributes.body);
   const requestOid = readDer(request.body);
@@ -78,6 +86,56 @@ test('pasted CSR must be a complete PEM DER sequence', async () => {
   const generated = await generateCsr(['example.com']);
   const truncated = generated.der.slice(0, -1);
   assert.throws(() => parseCsr(pem('CERTIFICATE REQUEST', truncated)));
+});
+
+const classicalCsrs = {
+  ecdsa: `-----BEGIN CERTIFICATE REQUEST-----
+MIHGMG4CAQAwDDEKMAgGA1UEAwwBeDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IA
+BHN01G4SSMLdNDMYtKzmCZmpKvM+DvOd45GuTfNR1mJaShsRnYDgD/LttPYpwnQQ
+mK3Je7gChcLuN/oLthJGQ4qgADAKBggqhkjOPQQDAgNIADBFAiBHSxBzVOeNIWr3
+n8iUZ+d254M3+AjZe1QyjnTMXuDGaAIhAMX/k/o1a4BrabVTbpswHhlgmSIKmYio
+1pGqIWPZiR+o
+-----END CERTIFICATE REQUEST-----`,
+  ed25519: `-----BEGIN CERTIFICATE REQUEST-----
+MIGLMD8CAQAwDDEKMAgGA1UEAwwBeDAqMAUGAytlcAMhAK53dXKf+ZCttRHWc7KV
+5hQQjuubgmbihbdXURiOt9a8oAAwBQYDK2VwA0EAvuRERjwIpHbsJ+B+7LZBVtXp
+/mk6JvZhxnLxYhVXTTQQyAVcxAKAwceU2snpfOIisnJyKqUwp1eWNJezxBuuCA==
+-----END CERTIFICATE REQUEST-----`,
+  rsa: `-----BEGIN CERTIFICATE REQUEST-----
+MIIBSzCBtQIBADAMMQowCAYDVQQDDAF4MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCB
+iQKBgQDuxUf3v0IrtepUTeq6UImoml6+pKVRLaT7GTS/CHPDPSnPNIDwVUlDkT2C
+lnpqDB5CAabYtiKIwm1cB7athNfQDgUGSaGHeAaNK+dfW5e/RBE1oEa6W717lpSp
+p5N/3RRw2ZrztOLZ0AxhYF6n+Z8pK+mPvfTK1sCKbctWm8pJ6wIDAQABoAAwDQYJ
+KoZIhvcNAQELBQADgYEAlPmpprn1BBdXGmtJ/B0xqu8QShPf5pOgxfJX/vjCNLR/
+LQCKHScc57T+ElC5W0TN3+3ptJNhWLZac6YE4eSUmd98ZwD2bygsjonAly4Fg9+f
+cnp9LJqf1xnICFYy3VviJi+IhqWn6zXz93HnfqEEygctxYWKTKBBiukIcly7CnI=
+-----END CERTIFICATE REQUEST-----`,
+};
+
+test('pasted CSRs must use a validly self-signed ML-DSA key', async () => {
+  for (const [name, csr] of Object.entries(classicalCsrs)) {
+    assert.throws(() => parseCsr(csr), /RSA, ECDSA, HashML-DSA, and other algorithms are not permitted/, name);
+  }
+  const generated = await generateCsr(['example.com']);
+  const root = readDer(generated.der);
+  const info = readDer(root.body);
+  const signature = readDer(root.body, readDer(root.body, info.end).end);
+  const withSignatureAlgorithm = (hex) => {
+    const body = Buffer.concat([info.full, Buffer.from(hex, 'hex'), signature.full]);
+    return pem('CERTIFICATE REQUEST', Buffer.concat([Buffer.from([0x30, 0x82, body.length >> 8, body.length & 255]), body]));
+  };
+  assert.deepEqual(parseCsr(withSignatureAlgorithm('300b0609608648016503040311')), generated.der);
+  assert.throws(() => parseCsr(withSignatureAlgorithm('300b0609608648016503040312')), /must match its ML-DSA-44 key/);
+  for (const [name, hex] of Object.entries({
+    parameters: '300d06096086480165030403110500',
+    nonMinimalLength: '30810b0609608648016503040311',
+    hashMlDsa44: '300b0609608648016503040320',
+  })) {
+    assert.throws(() => parseCsr(withSignatureAlgorithm(hex)), /are not permitted/, name);
+  }
+  const tampered = generated.der.slice();
+  tampered[tampered.length - 1] ^= 1;
+  assert.throws(() => parseCsr(pem('CERTIFICATE REQUEST', tampered)), /signature is invalid/);
 });
 
 test('CSR DER length encoding supports large SAN lists without truncation', async () => {

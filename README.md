@@ -41,12 +41,20 @@ domain for the Pages site.
 2. Replace `https://acme.mtc.example/directory` with your server's directory URL
    and select **Connect**. The default is deliberately fictional.
 3. Enter DNS names, optionally an account email, and choose a CSR mode:
-   - **Generate:** creates a separate ECDSA P-256 certificate key and PKCS#10
-     CSR with DNS subject alternative names, locally with Web Crypto.
+   - **Generate:** creates a separate ML-DSA-44 certificate key and PKCS#10
+     CSR with DNS subject alternative names, locally in the browser. The key
+     is downloaded as a seed-only PKCS#8 file
+     ([RFC 9881](https://www.rfc-editor.org/rfc/rfc9881.html)).
      **Download the private key before leaving or reloading the page.**
-   - **Paste:** accepts a PEM PKCS#10 CSR. List exactly the DNS names in its SAN
-     extension. Keep its private key yourself. The CA validates the CSR and
-     identifier match; the webpage only checks the PEM/DER envelope.
+   - **Paste:** accepts a PEM PKCS#10 CSR with an ML-DSA-44, ML-DSA-65, or
+     ML-DSA-87 key, as permitted for Subscriber certificates by the
+     [Chrome Quantum-resistant Root Program policy](https://googlechrome.github.io/chromerootprogram/cqrp/draft-policy/)
+     (§2.4.3.2). The key and signature AlgorithmIdentifiers must be
+     byte-for-byte the policy's encodings (pure ML-DSA, parameters absent).
+     RSA, ECDSA, EdDSA, HashML-DSA, and all other key types are rejected.
+     List exactly the DNS names in its SAN extension. Keep its private key
+     yourself. The webpage checks the key and signature algorithms and the
+     CSR's self-signature; the CA validates the CSR and identifier match.
 4. Read and accept the connected server's terms, then place an order.
 5. Provision one offered challenge per authorization: publish the displayed
    `dns-01` TXT record or serve the exact `http-01` body. Select **validate**
@@ -69,9 +77,9 @@ If you forget the account cookie, the app cannot recover the old account.
 - MTC support does not imply support for ML-DSA account keys. A conventional
   ACME server may reject this algorithm; the client deliberately does not
   fall back to a classical account key.
-- Certificate keys are independent of account keys. The generated P-256
-  certificate key is **not post-quantum**. Paste a CSR with a different
-  server-supported key type if required by the server's MTC profile.
+- Certificate keys are independent of account keys, but must also be ML-DSA.
+  The server's MTC profile must accept ML-DSA certificate keys; the client
+  deliberately does not permit classical certificate keys.
 - Certificate POST-as-GET requests advertise
   `application/pem-certificate-chain-with-properties` and, as a fallback,
   `application/pem-certificate-chain`. MTC responses may contain a
