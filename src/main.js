@@ -1,6 +1,6 @@
 import './style.css';
 import { AcmeClient, endpoint } from './acme.js';
-import { loadAccount, clearAccount, parseDomains, generateCsr, parseCsr, sha256, utf8, base64url } from './crypto.js';
+import { loadAccount, createAccount, clearAccount, parseDomains, generateCsr, parseCsr, sha256, utf8, base64url } from './crypto.js';
 
 const $ = (id) => document.getElementById(id);
 let account;
@@ -197,14 +197,31 @@ $('download-key').addEventListener('click', () => download('certificate-key.pem'
 $('download-csr').addEventListener('click', () => download('request.csr.pem', generated.csr, 'application/pkcs10'));
 $('download-certificate').addEventListener('click', () => download('certificate-response.bin', certificate));
 $('reset-account').addEventListener('click', () => {
-  if (confirm('Forget the account key? You will lose access to this account unless you saved its cookie seed.')) {
+  if (confirm('Forget the account key? You will lose access to this account unless you saved its cookie value.')) {
     clearAccount();
     location.reload();
   }
 });
 
+async function showAccount() {
+  $('account-form').hidden = Boolean(account);
+  $('reset-account').hidden = !account;
+  $('account-status').textContent = account
+    ? `${account.jwk.alg} · Account thumbprint: ${await account.thumbprint()}`
+    : 'No account key on this origin. Choose an algorithm to create one.';
+}
+
+$('account-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  run('Creating account key…', async () => {
+    account = createAccount(document.querySelector('[name="account-alg"]:checked').value);
+    if (client) client.account = account;
+    await showAccount();
+  });
+});
+
 run('Loading local ML-DSA account…', async () => {
   if (!window.isSecureContext || !crypto.subtle) throw new Error('Open this app over HTTPS or localhost.');
   account = loadAccount();
-  $('account-status').textContent = `ML-DSA-65 · Account thumbprint: ${await account.thumbprint()}`;
+  await showAccount();
 });

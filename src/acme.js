@@ -50,7 +50,7 @@ export class AcmeClient {
       const nonce = this.nonce;
       this.nonce = undefined;
       const protectedHeader = {
-        alg: 'ML-DSA-65', nonce, url: endpoint(url),
+        alg: this.account.jwk.alg, nonce, url: endpoint(url),
         ...(useJwk ? { jwk: this.account.jwk } : { kid: this.kid }),
       };
       if (!useJwk && !this.kid) throw new Error('Register the ACME account first.');

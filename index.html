@@ -12,7 +12,7 @@
       <header>
         <p class="eyebrow">MERKLE TREE CERTIFICATES</p>
         <h1>ACME, in your browser.</h1>
-        <p>Request a certificate from an experimental MTC ACME server using an ML-DSA-65 account.</p>
+        <p>Request a certificate from an experimental MTC ACME server.</p>
       </header>
       <aside class="notice">
         <strong>Experimental demo — use test accounts only.</strong>
@@ -26,6 +26,16 @@
         <h2 id="account-heading">1. Your account</h2>
         <p>ML-DSA keys are generated locally. Returning to this origin restores the same account.</p>
         <p id="account-status">Loading account…</p>
+        <form id="account-form" hidden>
+          <fieldset>
+            <legend>Account key algorithm</legend>
+            <label class="choice"><input type="radio" name="account-alg" value="ML-DSA-44"> ML-DSA-44</label>
+            <label class="choice"><input type="radio" name="account-alg" value="ML-DSA-65" checked> ML-DSA-65</label>
+            <label class="choice"><input type="radio" name="account-alg" value="ML-DSA-87"> ML-DSA-87</label>
+          </fieldset>
+          <p class="hint">The ACME server must accept the chosen algorithm. It cannot be changed later without creating a new account.</p>
+          <button type="submit">Create account key</button>
+        </form>
         <button id="reset-account" type="button">Forget account</button>
       </section>
 
@@ -93,7 +103,7 @@
       </section>
       <p id="activity" role="status" aria-live="polite"></p>
       <p id="error" role="alert" hidden></p>
-      <footer>RFC 8555 workflow · ML-DSA-65 account signing · No telemetry or external runtime scripts</footer>
+      <footer>RFC 8555 workflow · ML-DSA account signing · No telemetry or external runtime scripts</footer>
     </main>
   </body>
 </html>
